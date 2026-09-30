@@ -515,6 +515,14 @@ await test('mode « Précis » sans WebGPU : message explicite, aucun téléchar
   const texte = await page.locator('.erreur-scene').innerText();
   assert(/nécessite WebGPU/.test(texte) && /chrome:\/\/gpu/.test(texte), `message : ${texte}`);
   assert(vus.length === 0, `rien ne doit être téléchargé : ${vus}`);
+  // Le réglage reste accessible une fois les images chargées, et un bouton corrige le réglage en un clic.
+  await page.locator('.reglages summary').click();
+  assert((await page.locator('#reglage-modele').inputValue()) === 'precis', 'le réglage enregistré (Précis) doit être affiché');
+  await page.getByRole('button', { name: 'Passer en mode Automatique et réessayer' }).click();
+  await attendreTermine(page, 1, 60_000);
+  assert(/MODNet \(WASM\)/.test(await page.locator('#meta-resultat').innerText()), 'MODNet doit traiter l’image');
+  assert((await page.locator('#reglage-modele').inputValue()) === 'auto', 'le réglage doit passer à Automatique');
+  assert((await page.evaluate(() => localStorage.getItem('detoure.modele'))) === 'auto', 'le nouveau réglage doit être mémorisé');
   await contexte.close();
 });
 

@@ -63,18 +63,6 @@
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3Zm-1 14-4-4 1.4-1.4L11 13.2l4.6-4.6L17 10l-6 6Z" /></svg>
             Vos images ne quittent jamais votre appareil
           </p>
-
-          <details class="reglages">
-            <summary>Réglages</summary>
-            <label class="champ" for="reglage-modele">
-              <span>Modèle d’IA</span>
-              <select id="reglage-modele">
-                <option value="auto">Automatique (recommandé)</option>
-                <option value="precis">Précis – BiRefNet lite (tout type d’image, WebGPU requis)</option>
-                <option value="rapide">Rapide – MODNet (portraits, tous les appareils)</option>
-              </select>
-            </label>
-          </details>
         </section>
 
         <!-- Espace de travail : file d'attente + résultat -->
@@ -117,6 +105,19 @@
 
           <ul id="file" class="file" aria-label="Images à traiter"></ul>
         </section>
+
+        <!-- Réglages : visibles avec ou sans images (le choix du modèle peut servir après un échec) -->
+        <details class="reglages">
+          <summary>Réglages</summary>
+          <label class="champ" for="reglage-modele">
+            <span>Modèle d’IA</span>
+            <select id="reglage-modele">
+              <option value="auto">Automatique (recommandé)</option>
+              <option value="precis">Précis – BiRefNet lite (tout type d’image, WebGPU requis)</option>
+              <option value="rapide">Rapide – MODNet (portraits, tous les appareils)</option>
+            </select>
+          </label>
+        </details>
       </div>
 
       <!-- ===================== Page « À propos » ===================== -->
