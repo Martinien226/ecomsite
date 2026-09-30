@@ -29,6 +29,7 @@ const $ = (selecteur) => document.querySelector(selecteur);
  * @property {string|null} urlAvant
  * @property {string|null} urlApres
  * @property {string|null} codeErreur
+ * @property {string|null} detailErreur  détail technique de l'échec (affiché dans « Détails techniques »)
  */
 const etat = {
   /** @type {Element[]} */
@@ -93,6 +94,7 @@ function ajouterFichiers(fichiers) {
       urlAvant: null,
       urlApres: null,
       codeErreur: null,
+      detailErreur: null,
     };
     if (!formatAccepte(fichier)) {
       element.statut = 'erreur';
@@ -205,6 +207,7 @@ async function traiterUn(element) {
     console.error('[traitement]', erreur);
     element.statut = 'erreur';
     element.codeErreur = code;
+    element.detailErreur = erreur instanceof ErreurDetourage ? erreur.detail : String(erreur?.message ?? erreur);
   }
   rendre();
 }
@@ -304,11 +307,13 @@ function construireScene(scene, el) {
       bouton.addEventListener('click', () => {
         el.statut = 'attente';
         el.codeErreur = null;
+        el.detailErreur = null;
         rendre();
         traiterFile();
       });
       boite.append(bouton);
     }
+    if (el.detailErreur) boite.append(creerDetailsTechniques(el.detailErreur));
     scene.append(boite);
   } else {
     // En attente ou en cours : on montre l'image d'origine, estompée.
@@ -323,6 +328,35 @@ function construireScene(scene, el) {
     boite.querySelector('.voile').textContent = el.statut === 'encours' ? 'Traitement en cours…' : 'En attente…';
     scene.append(boite);
   }
+}
+
+/**
+ * Bloc repliable « Détails techniques » + bouton pour copier le texte : indispensable pour
+ * comprendre pourquoi un modèle n'a pas démarré sur un appareil donné (et pour le signaler).
+ */
+function creerDetailsTechniques(detail) {
+  const texte = [detail, '', `Navigateur : ${navigator.userAgent}`, `WebGPU : ${'gpu' in navigator ? 'oui' : 'non'}`].join('\n').trim();
+  const bloc = document.createElement('details');
+  bloc.className = 'technique';
+  const resume = document.createElement('summary');
+  resume.textContent = 'Détails techniques';
+  const contenu = document.createElement('pre');
+  contenu.textContent = texte;
+  const copier = document.createElement('button');
+  copier.type = 'button';
+  copier.className = 'bouton petit';
+  copier.textContent = 'Copier les détails';
+  copier.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(texte);
+      copier.textContent = 'Copié ✓';
+    } catch {
+      getSelection()?.selectAllChildren(contenu); // presse-papiers refusé : on sélectionne le texte pour Ctrl+C
+      copier.textContent = 'Texte sélectionné : Ctrl+C';
+    }
+  });
+  bloc.append(resume, contenu, copier);
+  return bloc;
 }
 
 function descriptionResultat(r) {

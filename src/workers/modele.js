@@ -16,6 +16,19 @@ import { listerCandidats } from './candidats.js';
 const echecs = new Set();
 /** Fichiers de poids absents du dépôt (« modèle|dtype ») : inutile de les redemander avec un autre moteur. */
 const manquants = new Set();
+/**
+ * Journal lisible des échecs (« modèle|moteur|dtype → message »), joint aux détails techniques
+ * affichés à l'utilisateur : sans lui, l'erreur finale ne dirait pas POURQUOI aucun modèle n'a démarré.
+ */
+const journal = [];
+let infoMoteurs = '';
+function noter(cle, erreur) {
+  const texte = String(erreur?.message ?? erreur).replace(/\s+/g, ' ').slice(0, 300);
+  journal.push(`${cle} → ${texte}`);
+  if (journal.length > 14) journal.shift();
+}
+const detailJournal = () => [infoMoteurs, ...journal].filter(Boolean).join('\n');
+
 let modeleCourant = null;
 let chargementEnCours = null;
 let configureEnv = false;
@@ -43,6 +56,7 @@ async function moteursDisponibles() {
     /* WebGPU indisponible : on passe au WASM */
   }
   moteurs.push({ id: 'wasm', fp16: false });
+  infoMoteurs = `moteurs : ${moteurs.map((m) => m.id + (m.fp16 ? ' (fp16)' : '')).join(', ')}`;
   return moteurs;
 }
 
@@ -51,8 +65,9 @@ async function candidats(preference) {
   return listerCandidats({ preference, moteurs: await moteursDisponibles(), echecs, manquants });
 }
 
-const estFichierManquant = (e) =>
-  e?.name === 'ModelFileNotFoundError' || /could not locate|not found|404/i.test(e?.message ?? '');
+// Seule une vraie absence de fichier (404) compte ici : d'autres erreurs contiennent « not found »
+// (ex. opérateur ONNX non géré) et ne doivent pas faire écarter les autres moteurs.
+const estFichierManquant = (e) => e?.name === 'ModelFileNotFoundError' || /could not locate file/i.test(e?.message ?? '');
 
 /**
  * Charge (ou réutilise) le meilleur modèle disponible.
@@ -97,6 +112,7 @@ async function charger(preference, onProgression) {
     } catch (erreur) {
       console.warn(`[modèle] échec de ${candidat.cle} :`, erreur);
       derniere = erreur;
+      noter(candidat.cle, erreur);
       // Coupure réseau : inutile d'insister avec les autres combinaisons, elles échoueront aussi.
       // On ne met PAS la combinaison de côté : un nouvel essai, une fois la connexion revenue, doit pouvoir réussir.
       if (!estFichierManquant(erreur) && estErreurReseau(erreur)) {
@@ -108,8 +124,8 @@ async function charger(preference, onProgression) {
       if (estFichierManquant(erreur)) manquants.add(`${candidat.config.id}|${candidat.dtype}`);
     }
   }
-  if (reseau) throw new ErreurDetourage('modele-reseau', String(reseau?.message ?? reseau));
-  throw new ErreurDetourage('modele-indisponible', String(derniere?.message ?? 'Aucun modèle utilisable'));
+  if (reseau) throw new ErreurDetourage('modele-reseau', detailJournal() || String(reseau?.message ?? reseau));
+  throw new ErreurDetourage('modele-indisponible', detailJournal() || String(derniere?.message ?? 'Aucun modèle utilisable'));
 }
 
 /** Libère la mémoire (GPU/CPU) du modèle courant. */
@@ -144,14 +160,15 @@ export async function inferer({ preference, racine, onProgression, preparerEntre
     } catch (erreur) {
       console.warn(`[inférence] échec de ${modele.cle} :`, erreur);
       derniereErreur = erreur;
+      noter(`${modele.cle} (inférence)`, erreur);
       echecs.add(modele.cle);
       await liberer();
       if (erreur instanceof ErreurDetourage) throw erreur;
     }
   }
   throw estErreurMemoire(derniereErreur)
-    ? new ErreurDetourage('memoire', String(derniereErreur?.message))
-    : new ErreurDetourage('modele-indisponible', String(derniereErreur?.message ?? derniereErreur));
+    ? new ErreurDetourage('memoire', detailJournal())
+    : new ErreurDetourage('modele-indisponible', detailJournal());
 }
 
 /** Convertit la sortie du réseau (float32 ou float16) en Float32Array. */
