@@ -2,7 +2,7 @@
 
 Application web **gratuite** de suppression d'arrière-plan (type remove.bg) :
 
-- l'IA tourne **dans le navigateur** de l'utilisateur : ni serveur, ni compte, ni clé d'API, ni base de données ;
+- l'IA tourne **dans le navigateur** de l'utilisateur (BiRefNet lite avec WebGPU, MODNet sur les autres appareils) : ni serveur, ni compte, ni clé d'API, ni base de données ;
 - **« Vos images ne quittent jamais votre appareil »** : seul le modèle d'IA est téléchargé, jamais les photos ;
 - export **PNG transparent en haute définition** (résolution d'origine, jusqu'à ~20 Mpx et plus) ;
 - interface **en français**, mobile d'abord, mode sombre automatique ;
@@ -105,7 +105,7 @@ Connect to Git**, choisissez votre dépôt GitHub, puis :
 ```
 Image d'origine (ex. 5472×3648)
    │  ① décodée dans le worker (orientation EXIF respectée)
-   ├─► version réduite 1024×1024 ──► ② BiRefNet lite (WebGPU, sinon WASM) ──► masque 1024×1024
+   ├─► version réduite 1024×1024 ──► ② BiRefNet lite (WebGPU) ou MODNet (sans WebGPU) ──► masque
    │                                                                           │
    │                                       ③ adoucissement léger des contours (feathering)
    │                                                                           │
@@ -129,7 +129,7 @@ src/
   lib/                   client du worker, erreurs en français, formats d'affichage, générateur .zip
   workers/
     segment.worker.js    Web Worker : orchestre tout le traitement
-    modele.js            chargement du modèle + repli automatique (WebGPU→WASM, BiRefNet→MODNet)
+    modele.js            chargement du modèle + repli automatique (BiRefNet→MODNet), redémarrage du worker après un échec
     candidats.js         ordre d'essai des modèles (fonction pure, testée)
     imagerie.js          décodage, masque, adoucissement, découpe HD, aperçus (OffscreenCanvas)
     ort-loader.js        moteur ONNX Runtime auto-hébergé (pas de CDN externe)
@@ -149,8 +149,8 @@ Tout se règle dans [`src/config.js`](src/config.js) : taille d'entrée du modè
 
 | Élément | Rôle | Licence |
 |---|---|---|
-| [BiRefNet](https://github.com/ZhengPeng7/BiRefNet), export ONNX [`onnx-community/BiRefNet_lite`](https://huggingface.co/onnx-community/BiRefNet_lite) | modèle principal | **MIT** |
-| [MODNet](https://github.com/ZHKKKe/MODNet), export ONNX [`Xenova/modnet`](https://huggingface.co/Xenova/modnet) | repli rapide, portraits | **Apache 2.0** |
+| [BiRefNet](https://github.com/ZhengPeng7/BiRefNet), export ONNX [`onnx-community/BiRefNet_lite`](https://huggingface.co/onnx-community/BiRefNet_lite) | modèle principal, **avec WebGPU** | **MIT** |
+| [MODNet](https://github.com/ZHKKKe/MODNet), export ONNX [`Xenova/modnet`](https://huggingface.co/Xenova/modnet) | appareils sans WebGPU et repli, conçu pour les portraits | **Apache 2.0** |
 | [Transformers.js](https://github.com/huggingface/transformers.js) | exécution dans le navigateur | Apache 2.0 |
 | [ONNX Runtime Web](https://github.com/microsoft/onnxruntime) | moteur WebGPU / WASM | MIT |
 | [Vite](https://vite.dev) | outil de build | MIT |
@@ -166,14 +166,21 @@ La page « À propos » de l'application reprend ces informations pour vos utili
 
 ## Choix du modèle par l'utilisateur
 
-Dans **Réglages** (page d'accueil) : *Automatique* (BiRefNet lite, puis MODNet si BiRefNet ne démarre pas),
-*Précis* (BiRefNet seul) ou *Rapide* (MODNet seul : plus léger, idéal pour portraits ou téléphones lents).
+Dans **Réglages** (page d'accueil) :
+
+- *Automatique* (recommandé) : BiRefNet lite si WebGPU est disponible, **sinon directement MODNet** ; MODNet sert aussi de repli si BiRefNet échoue.
+- *Précis* : BiRefNet seul, **WebGPU requis** (message explicite sinon, sans rien télécharger).
+- *Rapide* : MODNet seul, léger (~26 Mo), bon pour les portraits, fonctionne partout.
 
 ## Compatibilité
 
-- **Chrome / Edge (ordinateur et Android)** : WebGPU (rapide) ou WASM.
-- **Firefox, Safari** : WebGPU selon la version, sinon WASM (plus lent : compter de quelques secondes à
-  plus d'une minute par image sur téléphone). Le mode *Rapide* est conseillé sur les appareils modestes.
+- **Avec WebGPU** (Chrome / Edge récents avec accélération matérielle, Safari 26+) : BiRefNet lite, détourage
+  précis de tout type d'image (objets, produits, cheveux…).
+- **Sans WebGPU** : MODNet (WebAssembly), conçu pour les **portraits**. BiRefNet n'est volontairement pas utilisé
+  en WebAssembly : son inférence 1024×1024 dépasse la mémoire disponible (`std::bad_alloc`, mesuré), après un
+  téléchargement de ~200 Mo inutile.
+- Pour savoir si WebGPU est actif : ouvrez `chrome://gpu` et cherchez « WebGPU : Hardware accelerated ».
+  S'il est désactivé : Paramètres de Chrome → Système → « Utiliser l'accélération matérielle ».
 - Le WASM tourne sur un seul cœur : les hébergeurs gratuits n'autorisent pas les en-têtes nécessaires au
   multi-thread (`COOP/COEP`).
 
@@ -184,7 +191,8 @@ Dans **Réglages** (page d'accueil) : *Automatique* (BiRefNet lite, puis MODNet 
 | « Le modèle d'IA n'a pas pu démarrer sur cet appareil » | Ouvrez **Détails techniques** dans le message d'erreur : chaque tentative (modèle, moteur, format) y est listée avec sa cause. Le bouton **Copier les détails** facilite le signalement d'un problème. |
 | « Impossible de télécharger le modèle d'IA » | Connexion coupée ou Hugging Face inaccessible (réseau d'entreprise, pare-feu). Réessayez ; vérifiez que `huggingface.co` est joignable. |
 | « pas assez de mémoire » | Fermez d'autres onglets, essayez le mode *Rapide* ou une image plus petite. Les iPhone anciens ont peu de mémoire. |
-| Très lent, sans WebGPU | Normal en WASM. Utilisez Chrome/Edge sur ordinateur ou le mode *Rapide*. |
+| Détourage moins précis (objets, produits) | Sans WebGPU, c'est MODNet (portraits) qui travaille : le résultat indique « WebGPU indisponible ». Activez l'accélération matérielle (voir *Compatibilité*). |
+| « Le mode Précis nécessite WebGPU » | WebGPU n'est pas disponible sur cet appareil : choisissez *Automatique* ou *Rapide*, ou activez l'accélération matérielle. |
 | Site non mis à jour après un déploiement | Un bandeau « Nouvelle version disponible » apparaît : cliquez sur **Mettre à jour**. |
 | `npm install` bloque sur `onnxruntime-node` | Le fichier `.npmrc` du projet ignore déjà les scripts d'installation ; supprimez `node_modules` et relancez `npm install`. |
 
@@ -194,7 +202,7 @@ Dans **Réglages** (page d'accueil) : *Automatique* (BiRefNet lite, puis MODNet 
 npm test
 ```
 
-Voir [`tests/README.md`](tests/README.md) : 29 tests (unitaires + navigateur réel), dont une image de 20 Mpx,
+Voir [`tests/README.md`](tests/README.md) : 31 tests (unitaires + navigateur réel), dont une image de 20 Mpx,
 le hors-ligne réel et la simulation des URL de production. Les tests n'utilisent **pas** BiRefNet/MODNet
 (réseau bloqué en environnement automatisé) mais un petit modèle libre de substitution ; la qualité réelle
 de détourage se juge à la main, avec vos propres photos.

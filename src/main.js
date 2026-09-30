@@ -141,6 +141,7 @@ const TEXTES_ETAPES = {
   analyse: 'Analyse de l’image par l’IA…',
   decoupe: 'Découpe en haute définition…',
   export: 'Création du PNG…',
+  redemarrage: 'Nouvel essai avec un autre modèle…',
 };
 
 /** Numéro de l'image dans la session, pour les libellés « Image 2 sur 5 ». */
@@ -365,6 +366,9 @@ function descriptionResultat(r) {
     `PNG de ${formaterOctets(r.png.size)}`,
     `${formaterDuree(r.duree)} · ${r.modele} (${r.moteur === 'webgpu' ? 'WebGPU' : 'WASM'})`,
   ];
+  if (r.modele === 'MODNet' && r.moteur === 'wasm') {
+    parties.push('ℹ️ WebGPU indisponible : MODNet (conçu pour les portraits) a été utilisé');
+  }
   if (r.reduite) {
     parties.push(
       `⚠ Image réduite de ${formaterMegapixels(r.largeurOrigine, r.hauteurOrigine)} à ${formaterMegapixels(r.largeur, r.hauteur)} : trop grande pour cet appareil`,

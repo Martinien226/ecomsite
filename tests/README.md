@@ -25,8 +25,10 @@ est servi localement depuis `tests/fixtures/` (téléchargé automatiquement par
 Runtime, masque, découpe HD, PNG, cache hors ligne et PWA sont donc réellement exécutés, sans
 dépendre de Hugging Face. **Ce modèle n'existe pas dans la version de production.**
 
-Le dernier test de la suite compile aussi la version de production et simule Hugging Face pour
-vérifier les URL de modèles demandées et l'ordre de repli (BiRefNet → MODNet).
+La suite compile aussi la **version de production** et simule Hugging Face (Playwright) pour vérifier les URL
+de modèles demandées, l'ordre de repli, et la reprise après une panne mémoire du moteur. Pour cela, deux
+micro-modèles ONNX de quelques centaines d'octets sont versionnés dans `tests/modeles-factices/` (un qui
+fonctionne, un qui épuise la mémoire à l'inférence ; voir `creer.py`).
 
 ## Ce qui est vérifié
 
@@ -38,6 +40,8 @@ vérifier les URL de modèles demandées et l'ordre de repli (BiRefNet → MODNe
 - Lot de plusieurs images + archive `.zip` valide (`unzip -t`).
 - Messages d'erreur en français (format, fichier corrompu, réseau) et « Réessayer ».
 - Barre de progression du téléchargement du modèle (connexion lente simulée).
+- **Configuration de production** : sans WebGPU, MODNet seul (aucun téléchargement de BiRefNet) ; mode Précis
+  refusé sans téléchargement ; **panne mémoire du moteur → worker neuf → modèle suivant → image détourée**.
 - **Hors ligne réel** : le serveur est arrêté, l'application se recharge et traite une image.
 - Mobile 390 px / 360 px, pas de défilement horizontal, mode sombre.
 

@@ -27,10 +27,15 @@ function varianteOrt() {
   return ancien && !('gpu' in navigator) ? 'ort-wasm-simd-threaded' : 'ort-wasm-simd-threaded.asyncify';
 }
 
+/** Nombre maximal de worker successifs essayés pour une même image (un par candidat modèle/moteur). */
+const MAX_REDEMARRAGES = 6;
+
 export class Moteur {
   #worker = null;
   #taches = new Map(); // id → { resolve, reject, surEtat, surModele, surModelePret }
   #prochainId = 1;
+  /** Mémoire des combinaisons modèle/moteur qui ont échoué : inutile de les retenter à l'image suivante. */
+  #memoire = null;
 
   /** Contexte transmis au worker avec chaque image. */
   #contexte(preference) {
@@ -75,6 +80,7 @@ export class Moteur {
         break;
       case 'termine':
         this.#taches.delete(message.id);
+        this.#memoire = message.etat ?? null;
         tache.resolve(message.resultat);
         break;
       case 'fond-pret':
@@ -83,7 +89,7 @@ export class Moteur {
         break;
       case 'erreur':
         this.#taches.delete(message.id);
-        tache.reject(new ErreurDetourage(message.code, message.detail));
+        tache.reject(new ErreurDetourage(message.code, message.detail, message.etat));
         break;
     }
   }
@@ -101,9 +107,38 @@ export class Moteur {
     });
   }
 
-  /** Supprime l'arrière-plan d'un fichier image. Renvoie les blobs (PNG HD + aperçus) et des infos. */
-  traiter(fichier, { preference = 'auto', surEtat, surModele, surModelePret } = {}) {
-    return this.#envoyer({ type: 'traiter', fichier, contexte: this.#contexte(preference) }, { surEtat, surModele, surModelePret });
+  /** Arrête le worker courant : le suivant démarre avec un moteur ONNX tout neuf. */
+  #redemarrer() {
+    this.#worker?.terminate();
+    this.#worker = null;
+  }
+
+  /**
+   * Supprime l'arrière-plan d'un fichier image. Renvoie les blobs (PNG HD + aperçus) et des infos.
+   *
+   * Si le moteur ONNX échoue (mémoire épuisée…), le worker demande un « redémarrage » : on le
+   * remplace par un neuf et on relance avec le candidat suivant, en lui transmettant les échecs.
+   */
+  async traiter(fichier, { preference = 'auto', surEtat, surModele, surModelePret } = {}) {
+    const gestionnaires = { surEtat, surModele, surModelePret };
+    let etat = this.#memoire;
+    for (let essai = 0; essai < MAX_REDEMARRAGES; essai++) {
+      const contexte = { ...this.#contexte(preference), etat };
+      try {
+        return await this.#envoyer({ type: 'traiter', fichier, contexte }, gestionnaires);
+      } catch (erreur) {
+        if (erreur?.code !== 'redemarrage') {
+          this.#memoire = null; // échec définitif : un nouvel essai manuel repart de zéro
+          throw erreur;
+        }
+        etat = erreur.etat;
+        this.#memoire = etat;
+        this.#redemarrer();
+        surEtat?.('redemarrage');
+      }
+    }
+    this.#memoire = null;
+    throw new ErreurDetourage('modele-indisponible', 'Trop de redémarrages successifs du moteur');
   }
 
   /** Compose le PNG transparent sur un fond uni (renvoie un PNG opaque en pleine résolution). */
