@@ -314,6 +314,23 @@ function construireScene(scene, el) {
       });
       boite.append(bouton);
     }
+    if (el.codeErreur === 'webgpu-requis') {
+      // Raccourci : le réglage « Précis » enregistré ne peut pas fonctionner ici, on propose de le changer en un clic.
+      const bouton = document.createElement('button');
+      bouton.type = 'button';
+      bouton.className = 'bouton primaire';
+      bouton.textContent = 'Passer en mode Automatique et réessayer';
+      bouton.addEventListener('click', () => {
+        selectModele.value = 'auto';
+        ecrire(CLE_MODELE, 'auto');
+        el.statut = 'attente';
+        el.codeErreur = null;
+        el.detailErreur = null;
+        rendre();
+        traiterFile();
+      });
+      message.after(bouton);
+    }
     if (el.detailErreur) boite.append(creerDetailsTechniques(el.detailErreur));
     scene.append(boite);
   } else {
