@@ -487,6 +487,13 @@ await test('configuration de PRODUCTION : URL Hugging Face demandées et ordre d
   assert(!vus.some((u) => /rmbg|briaai/i.test(u)), 'RMBG (licence non commerciale) ne doit jamais être utilisé');
   const message = await page.locator('.erreur-scene').innerText();
   assert(/n’a pas pu démarrer sur cet appareil/.test(message), `message : ${message}`);
+  // Les détails techniques doivent lister chaque tentative (sinon impossible de comprendre l'échec).
+  await page.locator('.technique summary').click();
+  const details = await page.locator('.technique pre').innerText();
+  for (const attendu of ['birefnet|wasm|q8', 'birefnet|wasm|fp32', 'modnet|wasm|fp32', 'modnet|wasm|q8', 'Could not locate file', 'Navigateur :']) {
+    assert(details.includes(attendu), `« ${attendu} » absent des détails techniques :\n${details}`);
+  }
+  assert(await page.getByRole('button', { name: 'Copier les détails' }).isVisible(), 'bouton Copier attendu');
   await contexte.close();
   srvProd.httpServer.close();
 });

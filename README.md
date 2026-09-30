@@ -181,6 +181,7 @@ Dans **Réglages** (page d'accueil) : *Automatique* (BiRefNet lite, puis MODNet 
 
 | Symptôme | Piste |
 |---|---|
+| « Le modèle d'IA n'a pas pu démarrer sur cet appareil » | Ouvrez **Détails techniques** dans le message d'erreur : chaque tentative (modèle, moteur, format) y est listée avec sa cause. Le bouton **Copier les détails** facilite le signalement d'un problème. |
 | « Impossible de télécharger le modèle d'IA » | Connexion coupée ou Hugging Face inaccessible (réseau d'entreprise, pare-feu). Réessayez ; vérifiez que `huggingface.co` est joignable. |
 | « pas assez de mémoire » | Fermez d'autres onglets, essayez le mode *Rapide* ou une image plus petite. Les iPhone anciens ont peu de mémoire. |
 | Très lent, sans WebGPU | Normal en WASM. Utilisez Chrome/Edge sur ordinateur ou le mode *Rapide*. |
