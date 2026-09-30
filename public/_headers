@@ -1,0 +1,10 @@
+# En-têtes HTTP pour Cloudflare Pages (ignoré par GitHub Pages, sans conséquence).
+# Les fichiers de /assets/ ont un nom qui change à chaque build : on peut les garder un an.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Le service worker et le manifeste doivent toujours être revérifiés pour que les mises à jour arrivent.
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache

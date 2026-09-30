@@ -1,0 +1,10 @@
+node_modules/
+dist/
+# Runtime ONNX copié depuis node_modules par `npm run prepare:ort` (généré)
+public/ort/
+# Modèle et images de test téléchargés à la demande (voir tests/README.md)
+tests/fixtures/
+tests/out/
+*.log
+.DS_Store
+dist-test*/

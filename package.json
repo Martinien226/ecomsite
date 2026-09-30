@@ -1,0 +1,26 @@
+{
+  "name": "detoure",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Suppression d'arrière-plan d'images 100 % dans le navigateur (IA locale, gratuite, sans serveur).",
+  "type": "module",
+  "scripts": {
+    "prepare:ort": "node scripts/prepare-ort.mjs",
+    "dev": "node scripts/prepare-ort.mjs && vite",
+    "build": "node scripts/prepare-ort.mjs && vite build",
+    "preview": "vite preview",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "node tests/unit.mjs",
+    "test:e2e": "node tests/prepare-fixtures.mjs && node scripts/prepare-ort.mjs && node tests/e2e.mjs"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.3.0"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.56.1",
+    "vite": "^8.3.1"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}
