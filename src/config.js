@@ -55,7 +55,10 @@ export const MODELES = {
     taille: { mode: 'carre', cote: 1024 },
     moyenne: [0.485, 0.456, 0.406],
     ecartType: [0.229, 0.224, 0.225],
-    dtypes: { webgpu: ['fp16', 'fp32'], wasm: ['q8', 'fp32'] },
+    // WebGPU uniquement. Mesuré : en WebAssembly, l'inférence 1024×1024 épuise la mémoire
+    // (« std::bad_alloc », le WASM est limité à ~4 Go) après un téléchargement de ~200 Mo.
+    // Sans WebGPU, l'application utilise donc MODNet. Liste vide = moteur non pris en charge.
+    dtypes: { webgpu: ['fp16', 'fp32'], wasm: [] },
   },
   modnet: {
     id: 'modnet',
@@ -84,13 +87,6 @@ if (MODE_TEST) {
     dtypes: { webgpu: ['fp32'], wasm: ['fp32'] },
   };
 }
-
-/** Ordre d'essai des modèles pour chaque préférence de l'utilisateur. */
-export const ORDRE_MODELES = {
-  auto: MODE_TEST ? ['test'] : ['birefnet', 'modnet'],
-  precis: MODE_TEST ? ['test'] : ['birefnet'],
-  rapide: MODE_TEST ? ['test'] : ['modnet'],
-};
 
 /** Dossier (relatif à la racine du site) des fichiers du runtime ONNX auto-hébergés. */
 export const DOSSIER_ORT = 'ort/';

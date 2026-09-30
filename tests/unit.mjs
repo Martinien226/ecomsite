@@ -21,21 +21,22 @@ const GPU = { id: 'webgpu', fp16: true };
 const GPU_SANS_FP16 = { id: 'webgpu', fp16: false };
 const WASM = { id: 'wasm', fp16: false };
 
-await test('avec WebGPU : BiRefNet fp16 → fp32 (GPU) → q8 → fp32 (WASM), puis MODNet', () => {
+await test('avec WebGPU : BiRefNet fp16 → fp32, puis MODNet (GPU, puis WASM)', () => {
   egal(cles({ preference: 'auto', moteurs: [GPU, WASM] }), [
-    'birefnet|webgpu|fp16', 'birefnet|webgpu|fp32', 'birefnet|wasm|q8', 'birefnet|wasm|fp32',
+    'birefnet|webgpu|fp16', 'birefnet|webgpu|fp32',
     'modnet|webgpu|fp32', 'modnet|wasm|fp32', 'modnet|wasm|q8',
   ]);
 });
 await test('GPU sans fp16 : on saute le format fp16', () => {
   assert(!cles({ preference: 'auto', moteurs: [GPU_SANS_FP16, WASM] }).some((c) => c.endsWith('fp16')), 'fp16 ne doit pas être proposé');
 });
-await test('sans WebGPU : uniquement WASM, BiRefNet d’abord', () => {
-  const liste = cles({ preference: 'auto', moteurs: [WASM] });
-  egal(liste, ['birefnet|wasm|q8', 'birefnet|wasm|fp32', 'modnet|wasm|fp32', 'modnet|wasm|q8']);
+await test('sans WebGPU : MODNet directement (BiRefNet sature la mémoire du WASM, pas de téléchargement inutile)', () => {
+  egal(cles({ preference: 'auto', moteurs: [WASM] }), ['modnet|wasm|fp32', 'modnet|wasm|q8']);
+  assert(!cles({ preference: 'auto', moteurs: [WASM] }).some((c) => c.startsWith('birefnet')), 'BiRefNet ne doit pas être téléchargé en WASM');
 });
-await test('préférences « précis » (BiRefNet seul) et « rapide » (MODNet seul)', () => {
+await test('préférences « précis » (BiRefNet seul, WebGPU requis) et « rapide » (MODNet seul)', () => {
   assert(cles({ preference: 'precis', moteurs: [GPU, WASM] }).every((c) => c.startsWith('birefnet')), 'précis');
+  egal(cles({ preference: 'precis', moteurs: [WASM] }), [], 'précis sans WebGPU : aucun candidat');
   assert(cles({ preference: 'rapide', moteurs: [GPU, WASM] }).every((c) => c.startsWith('modnet')), 'rapide');
 });
 await test('combinaisons en échec et fichiers manquants sont écartés', () => {
@@ -45,8 +46,7 @@ await test('combinaisons en échec et fichiers manquants sont écartés', () => 
     echecs: new Set(['birefnet|webgpu|fp32']),
     manquants: new Set(['birefnet|fp16', 'modnet|q8']),
   });
-  assert(!liste.includes('birefnet|webgpu|fp16') && !liste.includes('birefnet|webgpu|fp32') && !liste.includes('modnet|wasm|q8'), `liste : ${liste}`);
-  assert(liste[0] === 'birefnet|wasm|q8', `premier candidat : ${liste[0]}`);
+  egal(liste, ['modnet|webgpu|fp32', 'modnet|wasm|fp32']);
 });
 await test('les modèles de production sont bien BiRefNet lite et MODNet (jamais RMBG)', async () => {
   const { MODELES, MODE_TEST } = await charger('/src/config.js');

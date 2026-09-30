@@ -16,6 +16,8 @@ const MESSAGES = {
     'Impossible de télécharger le modèle d’IA. Vérifiez votre connexion internet puis réessayez. Après un premier téléchargement réussi, l’application fonctionne hors ligne.',
   'modele-indisponible':
     'Le modèle d’IA n’a pas pu démarrer sur cet appareil. Essayez le mode « Rapide » dans les réglages, ou un navigateur récent (Chrome, Edge, Firefox, Safari à jour).',
+  'webgpu-requis':
+    'Le mode « Précis » (BiRefNet) nécessite WebGPU, qui n’est pas disponible sur cet appareil. Utilisez le mode « Automatique » ou « Rapide », ou activez l’accélération matérielle de votre navigateur (Chrome : Paramètres → Système, puis vérifiez chrome://gpu).',
   navigateur:
     'Votre navigateur est trop ancien pour cette application. Mettez-le à jour ou utilisez Chrome, Edge, Firefox ou Safari récents.',
   inconnue:
@@ -24,14 +26,16 @@ const MESSAGES = {
 
 export class ErreurDetourage extends Error {
   /**
-   * @param {keyof typeof MESSAGES} code  identifiant court de l'erreur
-   * @param {string} [detail]             détail technique (affiché seulement dans la console)
+   * @param {string} code      identifiant court de l'erreur (« redemarrage » = relancer dans un worker neuf)
+   * @param {string} [detail]  détail technique (affiché dans « Détails techniques »)
+   * @param {object} [etat]    mémoire des échecs à transmettre au worker suivant (code « redemarrage »)
    */
-  constructor(code, detail = '') {
+  constructor(code, detail = '', etat = undefined) {
     super(detail || code);
     this.name = 'ErreurDetourage';
-    this.code = code in MESSAGES ? code : 'inconnue';
+    this.code = code === 'redemarrage' || code in MESSAGES ? code : 'inconnue';
     this.detail = detail;
+    this.etat = etat;
   }
 }
 

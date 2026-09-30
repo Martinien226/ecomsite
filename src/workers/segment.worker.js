@@ -5,10 +5,12 @@
  * Messages reçus  : { type: 'traiter', id, fichier, contexte } | { type: 'fond', id, blob, couleur }
  * Messages émis   : 'etat' (étape en cours), 'modele' (progression du téléchargement),
  *                   'modele-pret', 'termine', 'fond-pret', 'erreur'
+ * Les messages 'termine' et 'erreur' portent aussi `etat` : la mémoire des combinaisons modèle/moteur
+ * qui ont échoué, que la page redonne au worker suivant (voir modele.js).
  */
 import { PIXELS_MAX } from '../config.js';
 import { ErreurDetourage, estErreurMemoire } from '../lib/erreurs.js';
-import { inferer } from './modele.js';
+import { exporterEtat, importerEtat, inferer } from './modele.js';
 import { preparerOrt } from './ort-loader.js';
 import {
   adoucirMasque,
@@ -42,7 +44,7 @@ async function executer(demande) {
         ? erreur
         : new ErreurDetourage(estErreurMemoire(erreur) ? 'memoire' : 'inconnue', String(erreur?.message ?? erreur));
     console.error('[worker]', e.code, e.detail || e);
-    poster({ type: 'erreur', id: demande.id, code: e.code, detail: e.detail });
+    poster({ type: 'erreur', id: demande.id, code: e.code, detail: e.detail, etat: e.etat ?? exporterEtat() });
   }
 }
 
@@ -50,6 +52,7 @@ async function traiter({ id, fichier, contexte }) {
   const debut = performance.now();
   const etat = (etape) => poster({ type: 'etat', id, etape });
   const { racine, variante, preference, pixelsMax = PIXELS_MAX } = contexte;
+  importerEtat(contexte.etat); // échecs déjà constatés (vide au premier essai)
 
   // 1. Décodage de l'image (orientation EXIF respectée)
   etat('lecture');
@@ -106,6 +109,7 @@ async function traiter({ id, fichier, contexte }) {
         dtype: modele.dtype,
         duree: performance.now() - debut,
       },
+      etat: exporterEtat(),
     });
   } finally {
     image.bitmap.close();

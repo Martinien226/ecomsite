@@ -454,49 +454,95 @@ await test('modèle absent du cache + serveur arrêté : message clair, puis « 
   await srv.arreter();
 });
 
-await test('configuration de PRODUCTION : URL Hugging Face demandées et ordre de repli (réponses simulées)', async () => {
-  // Compile la vraie version de production (sans le modèle de test) et simule Hugging Face :
-  // config.json répond, les fichiers .onnx sont absents (404) → on observe toute la chaîne de repli.
-  await build({ mode: 'production', logLevel: 'silent', build: { outDir: 'dist-test-prod' } });
-  const srvProd = await preview({ mode: 'production', logLevel: 'silent', build: { outDir: 'dist-test-prod' }, preview: { port: 4201, strictPort: false } });
-  const contexte = await navigateur.newContext({ serviceWorkers: 'block' });
-  const page = await contexte.newPage();
+// --- Version de PRODUCTION (sans le modèle de test) avec Hugging Face simulé --------------------------
+console.log('\nConfiguration de production (Hugging Face simulé)');
+await build({ mode: 'production', logLevel: 'silent', build: { outDir: 'dist-test-prod' } });
+const srvProd = await preview({ mode: 'production', logLevel: 'silent', build: { outDir: 'dist-test-prod' }, preview: { port: 4201, strictPort: false } });
+const modele = (nom) => readFileSync(join(racine, 'tests', 'modeles-factices', `${nom}.onnx`));
+
+/**
+ * Ouvre l'application de production dans un contexte où huggingface.co est simulé.
+ * @param {(chemin: string) => Buffer | null | undefined} fichiers  contenu du fichier `onnx/...` demandé (null = 404)
+ * @param {string} preference  réglage « Modèle d'IA » (auto, precis, rapide)
+ */
+async function ouvrirProduction(fichiers, preference = 'auto') {
+  const contexte = await navigateur.newContext({ viewport: { width: 1100, height: 900 } });
+  await contexte.addInitScript((pref) => localStorage.setItem('detoure.modele', pref), preference);
   const vus = [];
-  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' };
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-expose-headers': 'content-range, content-length' };
   await contexte.route('https://huggingface.co/**', (route) => {
-    const chemin = route.request().url().replace('https://huggingface.co/', '');
-    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    const req = route.request();
+    const chemin = req.url().replace('https://huggingface.co/', '');
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
     if (!vus.includes(chemin)) vus.push(chemin);
-    if (chemin.endsWith('config.json')) {
-      return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ model_type: 'test' }) });
-    }
-    return route.fulfill({ status: 404, headers: cors, body: 'Entry not found' });
+    if (chemin.endsWith('config.json')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ model_type: 'test' }) });
+    const corps = fichiers(chemin);
+    if (!corps) return route.fulfill({ status: 404, headers: cors, body: 'Entry not found' });
+    // Comme Hugging Face : une requête « Range: bytes=0-0 » sert d'abord à connaître la taille du fichier.
+    if (req.headers().range) return route.fulfill({ status: 206, headers: { ...cors, 'content-range': `bytes 0-0/${corps.length}`, 'content-length': '1' }, body: corps.subarray(0, 1) });
+    return route.fulfill({ status: 200, headers: { ...cors, 'content-length': String(corps.length) }, body: corps });
   });
+  const page = await contexte.newPage();
   await page.goto(srvProd.resolvedUrls.local[0]);
+  return { contexte, page, vus };
+}
+
+await test('sans WebGPU : MODNet directement — aucun téléchargement de BiRefNet — et détails techniques complets', async () => {
+  const { contexte, page, vus } = await ouvrirProduction(() => null); // tous les .onnx en 404
   await page.setInputFiles('#entree-fichiers', images('fusee.jpg'));
   await page.waitForSelector('.erreur-scene', { timeout: 60_000 });
   const attendu = [
-    'onnx-community/BiRefNet_lite/resolve/main/config.json',
-    'onnx-community/BiRefNet_lite/resolve/main/onnx/model_quantized.onnx',
-    'onnx-community/BiRefNet_lite/resolve/main/onnx/model.onnx',
     'Xenova/modnet/resolve/main/config.json',
     'Xenova/modnet/resolve/main/onnx/model.onnx',
     'Xenova/modnet/resolve/main/onnx/model_quantized.onnx',
   ];
   assert(JSON.stringify(vus) === JSON.stringify(attendu), `URL demandées :\n        ${vus.join('\n        ')}`);
-  assert(!vus.some((u) => /rmbg|briaai/i.test(u)), 'RMBG (licence non commerciale) ne doit jamais être utilisé');
-  const message = await page.locator('.erreur-scene').innerText();
-  assert(/n’a pas pu démarrer sur cet appareil/.test(message), `message : ${message}`);
-  // Les détails techniques doivent lister chaque tentative (sinon impossible de comprendre l'échec).
+  assert(!vus.some((u) => /rmbg|briaai|birefnet/i.test(u)), 'ni RMBG (licence non commerciale) ni BiRefNet (WASM insuffisant) ne doivent être demandés');
+  assert(/n’a pas pu démarrer sur cet appareil/.test(await page.locator('.erreur-scene').innerText()), 'message');
   await page.locator('.technique summary').click();
   const details = await page.locator('.technique pre').innerText();
-  for (const attendu of ['birefnet|wasm|q8', 'birefnet|wasm|fp32', 'modnet|wasm|fp32', 'modnet|wasm|q8', 'Could not locate file', 'Navigateur :']) {
+  for (const attendu of ['WebGPU (worker) :', 'modnet|wasm|fp32', 'modnet|wasm|q8', 'Could not locate file', 'Navigateur :']) {
     assert(details.includes(attendu), `« ${attendu} » absent des détails techniques :\n${details}`);
   }
   assert(await page.getByRole('button', { name: 'Copier les détails' }).isVisible(), 'bouton Copier attendu');
   await contexte.close();
-  srvProd.httpServer.close();
 });
+
+await test('mode « Précis » sans WebGPU : message explicite, aucun téléchargement', async () => {
+  const { contexte, page, vus } = await ouvrirProduction(() => modele('ok'), 'precis');
+  await page.setInputFiles('#entree-fichiers', images('fusee.jpg'));
+  await page.waitForSelector('.erreur-scene', { timeout: 60_000 });
+  const texte = await page.locator('.erreur-scene').innerText();
+  assert(/nécessite WebGPU/.test(texte) && /chrome:\/\/gpu/.test(texte), `message : ${texte}`);
+  assert(vus.length === 0, `rien ne doit être téléchargé : ${vus}`);
+  await contexte.close();
+});
+
+await test('échec mémoire du moteur → worker neuf → modèle suivant : l’image est quand même détourée', async () => {
+  // MODNet « complet » (fp32) épuise la mémoire à l'inférence (comme BiRefNet en WASM chez l'utilisateur) ;
+  // MODNet « léger » (q8) fonctionne. Sans redémarrage du worker, le second échouait aussi (constaté).
+  const { contexte, page, vus } = await ouvrirProduction((chemin) => (/model_quantized\.onnx$/.test(chemin) ? modele('ok') : /onnx\/model\.onnx$/.test(chemin) ? modele('oom') : null));
+  const etapes = [];
+  await page.exposeFunction('noterEtape', (t) => etapes.push(t));
+  await page.evaluate(() => {
+    new MutationObserver(() => window.noterEtape(document.querySelector('#etat-texte')?.textContent ?? '')).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  await page.setInputFiles('#entree-fichiers', images('portrait-cheveux.jpg'));
+  await attendreTermine(page, 1, 90_000);
+  const meta = await page.locator('#meta-resultat').innerText();
+  assert(/MODNet \(WASM\)/.test(meta), `meta : ${meta}`);
+  assert(/WebGPU indisponible/.test(meta), 'le conseil WebGPU doit s’afficher');
+  assert(etapes.some((t) => /Nouvel essai avec un autre modèle/.test(t)), 'le changement de modèle doit être annoncé à l’utilisateur');
+  assert(vus.some((u) => u.endsWith('model_quantized.onnx')), `q8 doit avoir été essayé : ${vus}`);
+  // L'image suivante ne doit pas retenter la combinaison qui a échoué.
+  const avant = vus.length;
+  await page.setInputFiles('#entree-fichiers', images('chat-fourrure.jpg'));
+  await attendreTermine(page, 2, 60_000);
+  assert(vus.length === avant, `la combinaison en échec ne doit pas être re-téléchargée : ${vus.slice(avant)}`);
+  await contexte.close();
+});
+
+srvProd.httpServer.close();
 
 console.log('\nMobile et mode sombre');
 await test('mobile (390 px) : pas de défilement horizontal, mode sombre automatique', async () => {

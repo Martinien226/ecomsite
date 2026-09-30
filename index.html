@@ -70,8 +70,8 @@
               <span>Modèle d’IA</span>
               <select id="reglage-modele">
                 <option value="auto">Automatique (recommandé)</option>
-                <option value="precis">Précis – BiRefNet lite (tout type d’image)</option>
-                <option value="rapide">Rapide – MODNet (portraits, appareils lents)</option>
+                <option value="precis">Précis – BiRefNet lite (tout type d’image, WebGPU requis)</option>
+                <option value="rapide">Rapide – MODNet (portraits, tous les appareils)</option>
               </select>
             </label>
           </details>
@@ -136,7 +136,11 @@
             ne sont envoyées nulle part.
           </p>
           <p>
-            Pour rester en haute définition, l’IA analyse une version réduite de la photo (1024 × 1024 pixels), puis le
+            L’IA utilisée dépend de votre appareil : <strong>BiRefNet lite</strong> (détourage précis de tout type d’image)
+            si WebGPU est disponible, sinon <strong>MODNet</strong>, plus léger et conçu pour les portraits.
+          </p>
+          <p>
+            Pour rester en haute définition, l’IA analyse une version réduite de la photo (par exemple 1024 × 1024 pixels), puis le
             masque obtenu est agrandi et appliqué sur l’image d’origine, pixel pour pixel, avec un léger adoucissement des
             contours. Le PNG téléchargé a donc la même résolution que votre photo.
           </p>
@@ -153,12 +157,12 @@
               <tbody>
                 <tr>
                   <td><a href="https://github.com/ZhengPeng7/BiRefNet" rel="noopener" target="_blank">BiRefNet</a> (version « lite », export ONNX <a href="https://huggingface.co/onnx-community/BiRefNet_lite" rel="noopener" target="_blank">onnx-community/BiRefNet_lite</a>)</td>
-                  <td>Modèle principal de suppression d’arrière-plan</td>
+                  <td>Modèle principal de suppression d’arrière-plan (appareils avec WebGPU)</td>
                   <td>MIT</td>
                 </tr>
                 <tr>
                   <td><a href="https://github.com/ZHKKKe/MODNet" rel="noopener" target="_blank">MODNet</a> (export ONNX <a href="https://huggingface.co/Xenova/modnet" rel="noopener" target="_blank">Xenova/modnet</a>)</td>
-                  <td>Modèle de repli, rapide, spécialisé dans les portraits</td>
+                  <td>Appareils sans WebGPU et modèle de repli : rapide, spécialisé dans les portraits</td>
                   <td>Apache 2.0</td>
                 </tr>
                 <tr>
